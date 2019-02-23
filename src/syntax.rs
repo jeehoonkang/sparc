@@ -1,82 +1,158 @@
 //! Umut A. Acar || Guy E. Blelloch.  Algorithm Design: Parallel and Sequential.  Definition 3.4
 //! [SPARC expressions] (page 30)
 
-type Id = String;
-type Var = Id;
-type TCon = Id;
-type DCon = Id;
+// TODO: what is `Arc` and what is `Box`?
 
-enum Pattern {
-    Var(Var),
-    Paren {
-        inner: Box<Pattern>,
+use std::sync::Arc;
+
+#[derive(Debug)]
+pub enum Err {
+    InvalidIteCond {
+        cond: Arc<Value>,
     },
+    InvalidUnaryOpArgs {
+        op: UnaryOp,
+        inner: Arc<Value>,
+    },
+    InvalidBinaryOpArgs {
+        op: BinaryOp,
+        lhs: Arc<Value>,
+        rhs: Arc<Value>,
+    },
+}
+
+pub type Id = String;
+pub type Var = Id;
+pub type Ctor = Id;
+
+#[derive(Debug, Clone)]
+pub enum Pattern {
+    Var(Var),
     Pair {
-        left: Box<Pattern>,
-        right: Box<Pattern>,
+        lhs: Box<Pattern>,
+        rhs: Box<Pattern>,
     },
     DPat {
-        dcon: DCon,
+        ctor: Ctor,
         inner: Box<Pattern>,
     },
 }
 
-enum Typ {
+#[derive(Debug, Clone)]
+pub enum Typ {
     Integer,
     Boolean,
     Product { inner: Vec<Box<Typ>> },
     Fun { lhs: Box<Typ>, rhs: Box<Typ> },
-    TCon(TCon),
-    DTyp { cons: Vec<(DCon, Box<Typ>)> },
+    Var(Var),
+    DTyp { cons: Vec<(Ctor, Box<Typ>)> },
 }
 
-enum UnaryOp {
+#[derive(Debug, Clone, Copy)]
+pub enum UnaryOp {
     Not,
     Neg,
 }
 
-enum BinaryOp {
-    And,
+impl UnaryOp {
+    pub fn eval(self, inner: &Value) -> Result<Value, Err> {
+        match (self, inner) {
+            (Not, Value::Boolean(inner)) => Ok(Value::Boolean(!inner)),
+            (Neg, Value::Integer(inner)) => Ok(Value::Integer(-inner)),
+            (_, _) => Err(Err::InvalidUnaryOpArgs {
+                op: self,
+                inner: Arc::new(inner.clone()),
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum BinaryOp {
     Or,
+    And,
     Xor,
+
     Plus,
     Minus,
     Times,
+    Over,
+
+    Equal,
+    Less,
+    Le,
 }
 
-enum Value {
+impl BinaryOp {
+    pub fn eval(self, lhs: &Value, rhs: &Value) -> Result<Value, Err> {
+        match (self, lhs, rhs) {
+            (Or, Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs || *rhs)),
+            (And, Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs && *rhs)),
+            (Xor, Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs ^ *rhs)),
+
+            (Plus, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs + *rhs)),
+            (Minus, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs - *rhs)),
+            (Times, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs * *rhs)),
+            (Over, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs / *rhs)),
+
+            (Equal, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(*lhs == *rhs)),
+            (Less, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(*lhs < *rhs)),
+            (Le, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(*lhs <= *rhs)),
+
+            (_, _, _) => Err(Err::InvalidBinaryOpArgs {
+                op: self,
+                lhs: Arc::new(lhs.clone()),
+                rhs: Arc::new(rhs.clone()),
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Value {
     Integer(i64),
     Boolean(bool),
-    UnaryOp(UnaryOp),
-    BinaryOp(BinaryOp),
-    Pair { left: Box<Value>, right: Box<Value> },
-    Paren { inner: Box<Value> },
-    DCon { dcon: DCon, inner: Box<Value> },
-    Lambda { var: Var, expr: Box<Expr> },
+    Pair { lhs: Arc<Value>, rhs: Arc<Value> },
+    Ctor { ctor: Ctor, inner: Arc<Value> },
+    Lambda { pattern: Pattern, expr: Box<Expr> },
 }
 
-enum InfixOp {
-    // TODO ??
+impl Value {
+    pub fn coerce_integer(&self) -> Option<i64> {
+        match self {
+            Value::Integer(i) => Some(*i),
+            _ => None,
+        }
+    }
+
+    pub fn coerce_bool(&self) -> Option<bool> {
+        match self {
+            Value::Boolean(b) => Some(*b),
+            _ => None,
+        }
+    }
 }
 
-enum Expr {
+#[derive(Debug, Clone)]
+pub enum Expr {
     Var(Var),
-    Value(Box<Value>),
-    Infix {
-        op: InfixOp,
-        left: Box<Expr>,
-        right: Box<Expr>,
+    Value(Arc<Value>),
+    UnaryOp {
+        op: UnaryOp,
+        inner: Box<Expr>,
+    },
+    BinaryOp {
+        op: BinaryOp,
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
     },
     SeqPair {
-        left: Box<Expr>,
-        right: Box<Expr>,
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
     },
     ParPair {
-        left: Box<Expr>,
-        right: Box<Expr>,
-    },
-    Paren {
-        inner: Box<Expr>,
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
     },
     Case {
         inner: Box<Expr>,
@@ -97,7 +173,8 @@ enum Expr {
     },
 }
 
-enum Binding {
-    VarBind { var: Var, expr: Box<Expr> },
-    TypBind { var: TCon, typ: Box<Typ> },
+#[derive(Debug, Clone)]
+pub enum Binding {
+    Var { var: Var, expr: Box<Expr> },
+    Typ { var: Var, typ: Box<Typ> },
 }
