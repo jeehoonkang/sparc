@@ -1,7 +1,4 @@
-// TODO: what is `Arc` and what is `Box`?
-// TODO: what is in `syntax.rs` and what is in `semantics.rs`?
-
-use std::sync::Arc;
+use std::rc::Rc;
 
 pub type Var = String;
 pub type Ctor = String;
@@ -45,9 +42,18 @@ pub enum BinaryOp {
 pub enum Value {
     Integer(i64),
     Boolean(bool),
-    Pair { lhs: Arc<Value>, rhs: Arc<Value> },
-    Ctor { ctor: Ctor, inner: Arc<Value> },
-    Lambda { pattern: Pattern, expr: Box<Expr> },
+    Pair {
+        lhs: Box<Value>,
+        rhs: Box<Value>,
+    },
+    Ctor {
+        ctor: Ctor,
+        inner: Box<Value>,
+    },
+    Lambda {
+        pattern: Rc<Pattern>,
+        expr: Rc<Expr>,
+    },
 }
 
 impl Value {
@@ -69,7 +75,7 @@ impl Value {
 #[derive(Debug, Clone)]
 pub enum Expr {
     Var(Var),
-    Value(Arc<Value>),
+    Value(Box<Value>),
     UnaryOp {
         op: UnaryOp,
         inner: Box<Expr>,
@@ -89,7 +95,7 @@ pub enum Expr {
     },
     Case {
         inner: Box<Expr>,
-        patterns: Vec<(Pattern, Box<Expr>)>,
+        patterns: Vec<(Rc<Pattern>, Box<Expr>)>,
     },
     Ite {
         cond: Box<Expr>,

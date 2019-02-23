@@ -1,5 +1,8 @@
+// TODO: what is `Arc` and what is `Rc`?
+
 use std::cmp;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::arc_list::ArcList;
@@ -31,7 +34,7 @@ pub enum Err {
     },
     CaseNoMatch {
         inner: Arc<Value>,
-        patterns: Vec<Pattern>,
+        patterns: Vec<Rc<Pattern>>,
     },
     EnvNotFound {
         var: Var,
@@ -61,8 +64,8 @@ pub enum Value {
         inner: Arc<Value>,
     },
     Lambda {
-        pattern: Pattern,
-        expr: Box<Expr>,
+        pattern: Rc<Pattern>,
+        expr: Rc<Expr>,
         env: Env,
     },
 }
@@ -98,7 +101,27 @@ impl Env {
     }
 
     fn eval_value(&self, value: &SynValue) -> Result<Arc<Value>, Err> {
-        unimplemented!()
+        match value {
+            SynValue::Integer(inner) => Ok(Arc::new(Value::Integer(*inner))),
+            SynValue::Boolean(inner) => Ok(Arc::new(Value::Boolean(*inner))),
+            SynValue::Pair { lhs, rhs } => {
+                let lhs = self.eval_value(lhs)?;
+                let rhs = self.eval_value(rhs)?;
+                Ok(Arc::new(Value::Pair { lhs, rhs }))
+            }
+            SynValue::Ctor { ctor, inner } => {
+                let inner = self.eval_value(inner)?;
+                Ok(Arc::new(Value::Ctor {
+                    ctor: ctor.clone(),
+                    inner,
+                }))
+            }
+            SynValue::Lambda { pattern, expr } => Ok(Arc::new(Value::Lambda {
+                pattern: pattern.clone(),
+                expr: expr.clone(),
+                env: self.clone(),
+            })),
+        }
     }
 
     fn eval_pattern_inner(
@@ -169,8 +192,8 @@ impl Env {
         }
     }
 
-    fn eval_binary_op(op: BinaryOp, lhs: &Value, rhs: &Value) -> Result<Value, Err> {
-        match (op, lhs, rhs) {
+    fn eval_binary_op(op: BinaryOp, lhs: &Arc<Value>, rhs: &Arc<Value>) -> Result<Value, Err> {
+        match (op, &**lhs, &**rhs) {
             (BinaryOp::Or, Value::Boolean(lhs), Value::Boolean(rhs)) => {
                 Ok(Value::Boolean(*lhs || *rhs))
             }
@@ -206,8 +229,8 @@ impl Env {
 
             (_, _, _) => Err(Err::InvalidBinaryOpArgs {
                 op,
-                lhs: Arc::new(lhs.clone()),
-                rhs: Arc::new(rhs.clone()),
+                lhs: lhs.clone(),
+                rhs: rhs.clone(),
             }),
         }
     }
@@ -331,9 +354,9 @@ impl Env {
                 let mut env_piece = HashMap::new();
                 let mut work = 0;
                 let mut span = 0;
-                for binding in binds.iter() {
-                    let res = self.eval(&binding.expr)?;
-                    env_piece.insert(binding.var.clone(), res.result);
+                for bind in binds.iter() {
+                    let res = self.eval(&bind.expr)?;
+                    env_piece.insert(bind.var.clone(), res.result);
                     work += res.work;
                     span += res.span;
                 }
