@@ -38,16 +38,6 @@ pub enum Pattern {
     },
 }
 
-#[derive(Debug, Clone)]
-pub enum Typ {
-    Integer,
-    Boolean,
-    Product { inner: Vec<Box<Typ>> },
-    Fun { lhs: Box<Typ>, rhs: Box<Typ> },
-    Var(Var),
-    DTyp { cons: Vec<(Ctor, Box<Typ>)> },
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum UnaryOp {
     Not,
@@ -57,8 +47,8 @@ pub enum UnaryOp {
 impl UnaryOp {
     pub fn eval(self, inner: &Value) -> Result<Value, Err> {
         match (self, inner) {
-            (Not, Value::Boolean(inner)) => Ok(Value::Boolean(!inner)),
-            (Neg, Value::Integer(inner)) => Ok(Value::Integer(-inner)),
+            (UnaryOp::Not, Value::Boolean(inner)) => Ok(Value::Boolean(!inner)),
+            (UnaryOp::Neg, Value::Integer(inner)) => Ok(Value::Integer(-inner)),
             (_, _) => Err(Err::InvalidUnaryOpArgs {
                 op: self,
                 inner: Arc::new(inner.clone()),
@@ -86,18 +76,18 @@ pub enum BinaryOp {
 impl BinaryOp {
     pub fn eval(self, lhs: &Value, rhs: &Value) -> Result<Value, Err> {
         match (self, lhs, rhs) {
-            (Or, Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs || *rhs)),
-            (And, Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs && *rhs)),
-            (Xor, Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs ^ *rhs)),
+            (BinaryOp::Or, Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs || *rhs)),
+            (BinaryOp::And, Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs && *rhs)),
+            (BinaryOp::Xor, Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs ^ *rhs)),
 
-            (Plus, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs + *rhs)),
-            (Minus, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs - *rhs)),
-            (Times, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs * *rhs)),
-            (Over, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs / *rhs)),
+            (BinaryOp::Plus, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs + *rhs)),
+            (BinaryOp::Minus, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs - *rhs)),
+            (BinaryOp::Times, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs * *rhs)),
+            (BinaryOp::Over, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs / *rhs)),
 
-            (Equal, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(*lhs == *rhs)),
-            (Less, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(*lhs < *rhs)),
-            (Le, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(*lhs <= *rhs)),
+            (BinaryOp::Equal, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(*lhs == *rhs)),
+            (BinaryOp::Less, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(*lhs < *rhs)),
+            (BinaryOp::Le, Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(*lhs <= *rhs)),
 
             (_, _, _) => Err(Err::InvalidBinaryOpArgs {
                 op: self,
@@ -174,7 +164,7 @@ pub enum Expr {
 }
 
 #[derive(Debug, Clone)]
-pub enum Binding {
-    Var { var: Var, expr: Box<Expr> },
-    Typ { var: Var, typ: Box<Typ> },
+pub struct Binding {
+    pub var: Var,
+    pub expr: Box<Expr>,
 }

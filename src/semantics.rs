@@ -2,7 +2,7 @@ use std::cmp;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::syntax::{Binding, Err, Expr, Id, Typ, Value};
+use crate::syntax::{Err, Expr, Id, Value};
 
 struct Res<T> {
     result: T,
@@ -14,7 +14,6 @@ type EResult<T> = Result<Res<T>, Err>;
 
 struct Env {
     values: HashMap<Id, Arc<Value>>,
-    typs: HashMap<Id, Box<Typ>>,
 }
 
 impl Env {
@@ -112,26 +111,16 @@ impl Env {
             }
             Expr::Let { bindings, expr } => {
                 let mut values = HashMap::new();
-                let mut typs = HashMap::new();
                 let mut work = 0;
                 let mut span = 0;
                 for binding in bindings.iter() {
-                    match binding {
-                        Binding::Var { var, expr } => {
-                            let res = self.eval(expr)?;
-                            values.insert(var.clone(), res.result);
-                            work += res.work;
-                            span += res.span;
-                        }
-                        Binding::Typ { var, typ } => {
-                            typs.insert(var.clone(), typ.clone());
-                            work += 1;
-                            span += 1;
-                        }
-                    }
+                    let res = self.eval(&binding.expr)?;
+                    values.insert(binding.var.clone(), res.result);
+                    work += res.work;
+                    span += res.span;
                 }
 
-                let env = Env { values, typs };
+                let env = Env { values };
                 // TODO: chain environments
                 let res = env.eval(expr)?;
 
