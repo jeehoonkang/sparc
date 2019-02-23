@@ -1,0 +1,9 @@
+[package]
+name = "sparc"
+version = "0.1.0"
+authors = ["Jeehoon Kang <jeehoon.kang@sf.snu.ac.kr>"]
+edition = "2018"
+
+[dependencies]
+nom = "4.2.0"
+rayon = "1.0.3"
