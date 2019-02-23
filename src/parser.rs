@@ -1,8 +1,8 @@
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Color {
-    pub red:   u8,
+    pub red: u8,
     pub green: u8,
-    pub blue:  u8,
+    pub blue: u8,
 }
 
 fn from_hex(input: &str) -> Result<u8, std::num::ParseIntError> {
@@ -29,9 +29,15 @@ named!(pub hex_color<&str, Color>,
 
 #[test]
 fn parse_color() {
-    assert_eq!(hex_color("#2F14DF"), Ok(("", Color {
-        red: 47,
-        green: 20,
-        blue: 223,
-    })));
+    assert_eq!(
+        hex_color("#2F14DF"),
+        Ok((
+            "",
+            Color {
+                red: 47,
+                green: 20,
+                blue: 223,
+            }
+        ))
+    );
 }
