@@ -2,11 +2,13 @@ use std::marker::PhantomData;
 use std::ptr;
 use std::sync::Arc;
 
+#[derive(Debug)]
 struct Node<T> {
     data: T,
     next: Option<Arc<Node<T>>>,
 }
 
+#[derive(Debug)]
 pub struct ArcList<T> {
     inner: Option<Arc<Node<T>>>,
 }

@@ -3,21 +3,91 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::arc_list::ArcList;
-use crate::syntax::{Err, Expr, Value, Var};
+use crate::syntax::{BinaryOp, Ctor, Expr, Pattern, UnaryOp, Value as SynValue, Var};
 
+#[derive(Debug, Clone)]
 struct Res<T> {
     result: T,
     work: u64,
     span: u64,
 }
 
+#[derive(Debug, Clone)]
+pub enum Err {
+    InvalidIteCond {
+        cond: Arc<Value>,
+    },
+    InvalidUnaryOpArgs {
+        op: UnaryOp,
+        inner: Arc<Value>,
+    },
+    InvalidBinaryOpArgs {
+        op: BinaryOp,
+        lhs: Arc<Value>,
+        rhs: Arc<Value>,
+    },
+    InvalidAppArgs {
+        inner: Arc<Value>,
+    },
+    CaseNoMatch {
+        inner: Arc<Value>,
+        patterns: Vec<Pattern>,
+    },
+    EnvNotFound {
+        var: Var,
+    },
+    PatternNotMatched {
+        pattern: Pattern,
+        value: Arc<Value>,
+    },
+    CtorNotMatched {
+        ctor_pattern: Ctor,
+        ctor_value: Ctor,
+    },
+}
+
 type EResult<T> = Result<Res<T>, Err>;
+
+#[derive(Debug, Clone)]
+pub enum Value {
+    Integer(i64),
+    Boolean(bool),
+    Pair {
+        lhs: Arc<Value>,
+        rhs: Arc<Value>,
+    },
+    Ctor {
+        ctor: Ctor,
+        inner: Arc<Value>,
+    },
+    Lambda {
+        pattern: Pattern,
+        expr: Box<Expr>,
+        env: Env,
+    },
+}
+
+impl Value {
+    pub fn coerce_integer(&self) -> Option<i64> {
+        match self {
+            Value::Integer(i) => Some(*i),
+            _ => None,
+        }
+    }
+
+    pub fn coerce_bool(&self) -> Option<bool> {
+        match self {
+            Value::Boolean(b) => Some(*b),
+            _ => None,
+        }
+    }
+}
 
 pub type EnvPiece = HashMap<Var, Arc<Value>>;
 pub type Env = ArcList<EnvPiece>;
 
 impl Env {
-    fn lookup(&self, var: &Var) -> Result<Arc<Value>, Err> {
+    fn eval_var(&self, var: &Var) -> Result<Arc<Value>, Err> {
         for map in self.iter() {
             if let Some(res) = map.get(var) {
                 return Ok(res.clone());
@@ -27,21 +97,136 @@ impl Env {
         Err(Err::EnvNotFound { var: var.clone() })
     }
 
+    fn eval_value(&self, value: &SynValue) -> Result<Arc<Value>, Err> {
+        unimplemented!()
+    }
+
+    fn eval_pattern_inner(
+        &self,
+        pattern: &Pattern,
+        value: &Arc<Value>,
+        env_piece: &mut EnvPiece,
+    ) -> Result<(), Err> {
+        match (pattern, &**value) {
+            (Pattern::Var(var), _) => {
+                env_piece.insert(var.clone(), value.clone());
+                Ok(())
+            }
+            (
+                Pattern::Pair {
+                    lhs: lhs_pattern,
+                    rhs: rhs_pattern,
+                },
+                Value::Pair {
+                    lhs: lhs_value,
+                    rhs: rhs_value,
+                },
+            ) => {
+                self.eval_pattern_inner(lhs_pattern, lhs_value, env_piece)?;
+                self.eval_pattern_inner(rhs_pattern, rhs_value, env_piece)?;
+                Ok(())
+            }
+            (
+                Pattern::Ctor {
+                    ctor: ctor_pattern,
+                    inner: inner_pattern,
+                },
+                Value::Ctor {
+                    ctor: ctor_value,
+                    inner: inner_value,
+                },
+            ) => {
+                if ctor_pattern != ctor_value {
+                    return Err(Err::CtorNotMatched {
+                        ctor_pattern: ctor_pattern.clone(),
+                        ctor_value: ctor_value.clone(),
+                    });
+                }
+                self.eval_pattern_inner(inner_pattern, inner_value, env_piece)?;
+                Ok(())
+            }
+            _ => Err(Err::PatternNotMatched {
+                pattern: pattern.clone(),
+                value: value.clone(),
+            }),
+        }
+    }
+
+    fn eval_pattern(&self, pattern: &Pattern, value: &Arc<Value>) -> Result<EnvPiece, Err> {
+        let mut env_piece = EnvPiece::new();
+        self.eval_pattern_inner(pattern, value, &mut env_piece)?;
+        Ok(env_piece)
+    }
+
+    fn eval_unary_op(op: UnaryOp, inner: &Arc<Value>) -> Result<Value, Err> {
+        match (op, &**inner) {
+            (UnaryOp::Not, Value::Boolean(inner)) => Ok(Value::Boolean(!inner)),
+            (UnaryOp::Neg, Value::Integer(inner)) => Ok(Value::Integer(-inner)),
+            _ => Err(Err::InvalidUnaryOpArgs {
+                op,
+                inner: inner.clone(),
+            }),
+        }
+    }
+
+    fn eval_binary_op(op: BinaryOp, lhs: &Value, rhs: &Value) -> Result<Value, Err> {
+        match (op, lhs, rhs) {
+            (BinaryOp::Or, Value::Boolean(lhs), Value::Boolean(rhs)) => {
+                Ok(Value::Boolean(*lhs || *rhs))
+            }
+            (BinaryOp::And, Value::Boolean(lhs), Value::Boolean(rhs)) => {
+                Ok(Value::Boolean(*lhs && *rhs))
+            }
+            (BinaryOp::Xor, Value::Boolean(lhs), Value::Boolean(rhs)) => {
+                Ok(Value::Boolean(*lhs ^ *rhs))
+            }
+
+            (BinaryOp::Plus, Value::Integer(lhs), Value::Integer(rhs)) => {
+                Ok(Value::Integer(*lhs + *rhs))
+            }
+            (BinaryOp::Minus, Value::Integer(lhs), Value::Integer(rhs)) => {
+                Ok(Value::Integer(*lhs - *rhs))
+            }
+            (BinaryOp::Times, Value::Integer(lhs), Value::Integer(rhs)) => {
+                Ok(Value::Integer(*lhs * *rhs))
+            }
+            (BinaryOp::Over, Value::Integer(lhs), Value::Integer(rhs)) => {
+                Ok(Value::Integer(*lhs / *rhs))
+            }
+
+            (BinaryOp::Equal, Value::Integer(lhs), Value::Integer(rhs)) => {
+                Ok(Value::Boolean(*lhs == *rhs))
+            }
+            (BinaryOp::Less, Value::Integer(lhs), Value::Integer(rhs)) => {
+                Ok(Value::Boolean(*lhs < *rhs))
+            }
+            (BinaryOp::Le, Value::Integer(lhs), Value::Integer(rhs)) => {
+                Ok(Value::Boolean(*lhs <= *rhs))
+            }
+
+            (_, _, _) => Err(Err::InvalidBinaryOpArgs {
+                op,
+                lhs: Arc::new(lhs.clone()),
+                rhs: Arc::new(rhs.clone()),
+            }),
+        }
+    }
+
     fn eval(&self, expr: &Expr) -> EResult<Arc<Value>> {
         match expr {
             Expr::Var(var) => Ok(Res {
-                result: self.lookup(var)?,
+                result: self.eval_var(var)?,
                 work: 1,
                 span: 1,
             }),
             Expr::Value(value) => Ok(Res {
-                result: value.clone(), // TODO: should make a closure
+                result: self.eval_value(value)?,
                 work: 1,
                 span: 1,
             }),
             Expr::UnaryOp { op, inner } => {
                 let inner = self.eval(inner)?;
-                let res = op.eval(&inner.result)?;
+                let res = Self::eval_unary_op(*op, &inner.result)?;
 
                 Ok(Res {
                     result: Arc::new(res),
@@ -52,7 +237,7 @@ impl Env {
             Expr::BinaryOp { op, lhs, rhs } => {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
-                let res = op.eval(&lhs.result, &rhs.result)?;
+                let res = Self::eval_binary_op(*op, &lhs.result, &rhs.result)?;
 
                 Ok(Res {
                     result: Arc::new(res),
@@ -90,7 +275,7 @@ impl Env {
                 let inner = self.eval(inner)?;
 
                 for (pattern, expr) in patterns.iter() {
-                    if let Ok(env_piece) = pattern.pattern_match(&inner.result) {
+                    if let Ok(env_piece) = self.eval_pattern(pattern, &inner.result) {
                         let env = self.clone().insert(env_piece);
                         let inner = env.eval(expr)?;
 
@@ -127,13 +312,13 @@ impl Env {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
 
-                let (lhs_pattern, lhs_expr) = match &*lhs.result {
-                    Value::Lambda { pattern, expr } => (pattern, expr),
+                let (lhs_pattern, lhs_expr, lhs_env) = match &*lhs.result {
+                    Value::Lambda { pattern, expr, env } => (pattern, expr, env),
                     _ => Err(Err::InvalidAppArgs { inner: lhs.result })?,
                 };
 
-                let env_piece = lhs_pattern.pattern_match(&rhs.result)?;
-                let env = self.clone().insert(env_piece);
+                let env_piece = self.eval_pattern(lhs_pattern, &rhs.result)?;
+                let env = lhs_env.clone().insert(env_piece);
                 let app = env.eval(lhs_expr)?;
 
                 Ok(Res {
@@ -153,8 +338,7 @@ impl Env {
                     span += res.span;
                 }
 
-                // TODO: should use the closure's environment
-                let env = Env::new().insert(env_piece);
+                let env = self.clone().insert(env_piece);
                 let res = env.eval(expr)?;
 
                 Ok(Res {
