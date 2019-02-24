@@ -22,15 +22,7 @@ fn main() {
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_ref());
-
-                match executor.exec(&line) {
-                    Ok(value) => {
-                        println!("{:?}", value);
-                    }
-                    Err(e) => {
-                        eprintln!("{}", e);
-                    }
-                }
+                executor.exec(&line);
             }
             Err(ReadlineError::Interrupted) => {
                 println!("^C");

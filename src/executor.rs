@@ -1,8 +1,10 @@
-use std::sync::Arc;
+use std::str::FromStr;
+use codespan::{CodeMap, Span};
+use codespan_reporting::termcolor::StandardStream;
+use codespan_reporting::{emit, Diagnostic, ColorArg, Label, Severity};
 
 use crate::parser::ExprParser;
 use crate::semantics::Env;
-use crate::semantics::{Res, Value};
 
 pub struct Executor {
     parser: ExprParser,
@@ -17,17 +19,43 @@ impl Executor {
         }
     }
 
-    pub fn exec(&self, file: &str) -> Result<Res<Arc<Value>>, String> {
-        let expr = self
-            .parser
-            .parse(file)
-            .map_err(|e| format!("Parse error: {}", e))?;
+    pub fn exec(&self, input: &str) {
+        let expr = match self.parser.parse(input) {
+            Ok(expr) => expr,
+            Err(e) => {
+                let mut codemap = CodeMap::new();
+                let filemap = codemap.add_filemap("input".into(), input.into());
+                let writer = StandardStream::stderr(ColorArg::from_str("auto").unwrap().into());
+                let error = match e {
+                    lalrpop_util::ParseError::InvalidToken { location } => {
+                        Diagnostic::new(Severity::Error, "Invalid token")
+                            .with_label(Label::new_primary(Span::from_offset((location as u32).into(), 1.into())))
+                    }
+                    lalrpop_util::ParseError::UnrecognizedToken { token, expected } => {
+                        let mut error = Diagnostic::new(Severity::Error, "Unrecognized token");
+                        if let Some((start, _, end)) = token {
+                            error.with_label(Label::new_primary(Span::new(((start + 1) as u32).into(), ((end + 1) as u32).into())))
+                        } else {
+                            error.with_label(Label::new_primary(Span::from_offset((input.len() as u32).into(), 1.into())))
+                        }
+                    }
+                    _ => {
+                        Diagnostic::new(Severity::Error, format!("Unknown parse error: {}", e))
+                    },
+                };
+                emit(&mut writer.lock(), &codemap, &error).unwrap();
+                return;
+            }
+        };
 
-        let result = self
-            .env
-            .eval_expr(&expr)
-            .map_err(|e| format!("Runtime error: {:?}", e))?;
+        let result = match self.env.eval_expr(&expr) {
+            Ok(result) => result,
+            Err(e) => {
+                eprintln!("Runtime error: {:?}", e);
+                return;
+            }
+        };
 
-        Ok(result)
+        println!("{:?}", result);
     }
 }

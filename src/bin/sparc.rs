@@ -21,16 +21,9 @@ fn main() {
     // Calling .unwrap() is safe here because "INPUT" is required (if "INPUT" wasn't
     // required we could have used an 'if let' to conditionally get the value)
     let input_file = matches.value_of("INPUT_FILE").unwrap();
-    let contents =
+    let input =
         fs::read_to_string(input_file).expect(&format!("Cannot read from the file {}", input_file));
 
     let executor = Executor::new();
-    match executor.exec(&contents) {
-        Ok(value) => {
-            println!("{:?}", value);
-        }
-        Err(e) => {
-            eprintln!("{}", e);
-        }
-    }
+    executor.exec(&input);
 }
