@@ -1,3 +1,5 @@
+extern crate codespan;
+extern crate codespan_reporting;
 extern crate rustyline;
 extern crate sparc;
 
