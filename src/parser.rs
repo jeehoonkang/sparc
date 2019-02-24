@@ -3,8 +3,6 @@
 // underscore character (“ ”), and optionally end with some number of “primes”. Example identifiers
 // include, x′, x1, xl, myV ar, myT ype, myData, and my data."
 
-use crate::syntax::*;
-
 lalrpop_mod!(parser_inner); // synthesized by LALRPOP
 
 pub use parser_inner::ExprParser;

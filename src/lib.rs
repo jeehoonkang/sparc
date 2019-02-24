@@ -11,9 +11,9 @@ extern crate rayon;
 extern crate lalrpop_util;
 
 mod arc_list;
+mod executor;
 mod parser;
 mod semantics;
 mod syntax;
 
-pub use parser::ExprParser;
-pub use semantics::Env;
+pub use executor::Executor;
