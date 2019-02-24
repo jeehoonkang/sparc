@@ -9,7 +9,7 @@ use crate::arc_list::ArcList;
 use crate::syntax::{BinaryOp, Ctor, Expr, Pattern, UnaryOp, Value as SynValue, Var};
 
 #[derive(Debug, Clone)]
-struct Res<T> {
+pub struct Res<T> {
     result: T,
     work: u64,
     span: u64,
@@ -235,7 +235,7 @@ impl Env {
         }
     }
 
-    fn eval(&self, expr: &Expr) -> EResult<Arc<Value>> {
+    pub fn eval_expr(&self, expr: &Expr) -> EResult<Arc<Value>> {
         match expr {
             Expr::Var(var) => Ok(Res {
                 result: self.eval_var(var)?,
@@ -248,7 +248,7 @@ impl Env {
                 span: 1,
             }),
             Expr::UnaryOp { op, inner } => {
-                let inner = self.eval(inner)?;
+                let inner = self.eval_expr(inner)?;
                 let res = Self::eval_unary_op(*op, &inner.result)?;
 
                 Ok(Res {
@@ -258,8 +258,8 @@ impl Env {
                 })
             }
             Expr::BinaryOp { op, lhs, rhs } => {
-                let lhs = self.eval(lhs)?;
-                let rhs = self.eval(rhs)?;
+                let lhs = self.eval_expr(lhs)?;
+                let rhs = self.eval_expr(rhs)?;
                 let res = Self::eval_binary_op(*op, &lhs.result, &rhs.result)?;
 
                 Ok(Res {
@@ -269,8 +269,8 @@ impl Env {
                 })
             }
             Expr::SeqPair { lhs, rhs } => {
-                let lhs = self.eval(lhs)?;
-                let rhs = self.eval(rhs)?;
+                let lhs = self.eval_expr(lhs)?;
+                let rhs = self.eval_expr(rhs)?;
 
                 Ok(Res {
                     result: Arc::new(Value::Pair {
@@ -282,8 +282,8 @@ impl Env {
                 })
             }
             Expr::ParPair { lhs, rhs } => {
-                let lhs = self.eval(lhs)?;
-                let rhs = self.eval(rhs)?;
+                let lhs = self.eval_expr(lhs)?;
+                let rhs = self.eval_expr(rhs)?;
 
                 Ok(Res {
                     result: Arc::new(Value::Pair {
@@ -294,13 +294,13 @@ impl Env {
                     span: cmp::max(lhs.work, rhs.work) + 1,
                 })
             }
-            Expr::Case { inner, patterns } => {
-                let inner = self.eval(inner)?;
+            Expr::Case { inner, arms } => {
+                let inner = self.eval_expr(inner)?;
 
-                for (pattern, expr) in patterns.iter() {
+                for (pattern, expr) in arms.iter() {
                     if let Ok(env_piece) = self.eval_pattern(pattern, &inner.result) {
                         let env = self.clone().insert(env_piece);
-                        let inner = env.eval(expr)?;
+                        let inner = env.eval_expr(expr)?;
 
                         return Ok(Res {
                             result: inner.result,
@@ -312,18 +312,18 @@ impl Env {
 
                 Err(Err::CaseNoMatch {
                     inner: inner.result,
-                    patterns: patterns.iter().map(|(p, _)| p.clone()).collect(),
+                    patterns: arms.iter().map(|(p, _)| p.clone()).collect(),
                 })
             }
             Expr::Ite { cond, lhs, rhs } => {
-                let cond = self.eval(cond)?;
+                let cond = self.eval_expr(cond)?;
                 let cond_result = cond
                     .result
                     .coerce_bool()
                     .ok_or(Err::InvalidIteCond { cond: cond.result })?;
 
                 let body = if cond_result { lhs } else { rhs };
-                let body = self.eval(body)?;
+                let body = self.eval_expr(body)?;
 
                 Ok(Res {
                     result: body.result,
@@ -332,8 +332,8 @@ impl Env {
                 })
             }
             Expr::App { lhs, rhs } => {
-                let lhs = self.eval(lhs)?;
-                let rhs = self.eval(rhs)?;
+                let lhs = self.eval_expr(lhs)?;
+                let rhs = self.eval_expr(rhs)?;
 
                 let (lhs_pattern, lhs_expr, lhs_env) = match &*lhs.result {
                     Value::Lambda { pattern, expr, env } => (pattern, expr, env),
@@ -342,7 +342,7 @@ impl Env {
 
                 let env_piece = self.eval_pattern(lhs_pattern, &rhs.result)?;
                 let env = lhs_env.clone().insert(env_piece);
-                let app = env.eval(lhs_expr)?;
+                let app = env.eval_expr(lhs_expr)?;
 
                 Ok(Res {
                     result: app.result,
@@ -355,14 +355,14 @@ impl Env {
                 let mut work = 0;
                 let mut span = 0;
                 for bind in binds.iter() {
-                    let res = self.eval(&bind.expr)?;
+                    let res = self.eval_expr(&bind.expr)?;
                     env_piece.insert(bind.var.clone(), res.result);
                     work += res.work;
                     span += res.span;
                 }
 
                 let env = self.clone().insert(env_piece);
-                let res = env.eval(expr)?;
+                let res = env.eval_expr(expr)?;
 
                 Ok(Res {
                     result: res.result,

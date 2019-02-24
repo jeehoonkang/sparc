@@ -6,12 +6,14 @@
 #![warn(missing_debug_implementations)]
 #![warn(missing_docs)]
 
-#[macro_use]
-extern crate nom;
-
 extern crate rayon;
+#[macro_use]
+extern crate lalrpop_util;
 
 mod arc_list;
-pub mod parser;
+mod parser;
 mod semantics;
 mod syntax;
+
+pub use parser::ExprParser;
+pub use semantics::Env;

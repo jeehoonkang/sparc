@@ -1,0 +1,104 @@
+use std::str::FromStr;
+use std::rc::Rc;
+
+use crate::syntax::*;
+
+grammar;
+
+Var: String = <s:r"[a-z][a-zA-Z0-9_]*"> => s.to_string();
+Ctor: String = <s:r"[A-Z][a-zA-Z0-9_]*"> => s.to_string();
+
+Pattern: Pattern = {
+    <var:Var> => Pattern::Var(var),
+
+    "(" <lhs:Pattern> "," <rhs:Pattern> ")" => Pattern::Pair {
+        lhs: Box::new(lhs),
+        rhs: Box::new(rhs),
+    },
+
+    <ctor:Ctor> <inner: Pattern> => Pattern::Ctor {
+        ctor,
+        inner: Box::new(inner),
+    },
+};
+
+UnaryOp: UnaryOp = {
+    "!" => UnaryOp::Not,
+    "~" => UnaryOp::Neg,
+}
+
+BinaryOp: BinaryOp = {
+    "|" => BinaryOp::Or,
+    "&" => BinaryOp::And,
+    "^" => BinaryOp::Xor,
+
+    "+" => BinaryOp::Plus,
+    "-" => BinaryOp::Minus,
+    "*" => BinaryOp::Times,
+    "/" => BinaryOp::Over,
+
+    "==" => BinaryOp::Equal,
+    "<" => BinaryOp::Less,
+    "<=" => BinaryOp::Le,
+};
+
+Value: Value = {
+    <s:r"[-|+]?[0-9]+"> => Value::Integer(i64::from_str(s).unwrap()),
+    <s:"true"> => Value::Boolean(true),
+    <s:"false"> => Value::Boolean(false),
+    "(" <lhs:Value> "," <rhs:Value> ")" => Value::Pair {
+        lhs: Box::new(lhs),
+        rhs: Box::new(rhs),
+    },
+
+    <op:UnaryOp> => op.lift(),
+    <op:BinaryOp> => op.lift(),
+
+    <ctor:Ctor> <inner:Value> => Value::Ctor {
+        ctor,
+        inner: Box::new(inner),
+    },
+    "fun" <pattern:Pattern> "->" <expr:Expr> => Value::Lambda {
+        pattern: Rc::new(pattern),
+        expr: Rc::new(expr),
+    },
+};
+
+Arm: (Rc<Pattern>, Box<Expr>) = {
+    <pattern:Pattern> "=>" <expr:Expr> "," => (Rc::new(pattern), Box::new(expr)),
+};
+
+Bind: Bind = {
+    <var:Var> "=" <expr:Expr> "," => Bind { var, expr: Box::new(expr) },
+};
+
+pub Expr: Expr = {
+    "(" <inner:Expr> ")" => inner,
+    <var:Var> => Expr::Var(var),
+    <value:Value> => Expr::Value(Box::new(value)),
+    "(" <lhs:Expr> ";" <rhs:Expr> ")" => Expr::SeqPair {
+        lhs: Box::new(lhs),
+        rhs: Box::new(rhs),
+    },
+    "(" <lhs:Expr> "||" <rhs:Expr> ")" => Expr::ParPair {
+        lhs: Box::new(lhs),
+        rhs: Box::new(rhs),
+    },
+    "case" <inner:Expr> "{" <arms:Arm+> "}" => Expr::Case {
+        inner: Box::new(inner),
+        arms,
+    },
+    "if" <cond:Expr> "{" <lhs:Expr> "}" "else" "{" <rhs:Expr> "}" => Expr::Ite {
+        cond: Box::new(cond),
+        lhs: Box::new(lhs),
+        rhs: Box::new(rhs),
+    },
+    "(" <lhs:Expr> <rhs:Expr> ")" => Expr::App {
+        lhs: Box::new(lhs),
+        rhs: Box::new(rhs),
+    },
+    "let" <binds:Bind+> "in" <expr:Expr> => Expr::Let {
+        binds,
+        expr: Box::new(expr),
+    },
+};

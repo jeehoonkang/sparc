@@ -22,6 +22,18 @@ pub enum UnaryOp {
     Neg,
 }
 
+impl UnaryOp {
+    pub fn lift(self) -> Value {
+        Value::Lambda {
+            pattern: Rc::new(Pattern::Var("x".into())),
+            expr: Rc::new(Expr::UnaryOp {
+                op: self,
+                inner: Box::new(Expr::Var("x".into())),
+            }),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum BinaryOp {
     Or,
@@ -36,6 +48,22 @@ pub enum BinaryOp {
     Equal,
     Less,
     Le,
+}
+
+impl BinaryOp {
+    pub fn lift(self) -> Value {
+        Value::Lambda {
+            pattern: Rc::new(Pattern::Var("x".into())),
+            expr: Rc::new(Expr::Value(Box::new(Value::Lambda {
+                pattern: Rc::new(Pattern::Var("y".into())),
+                expr: Rc::new(Expr::BinaryOp {
+                    op: self,
+                    lhs: Box::new(Expr::Var("x".into())),
+                    rhs: Box::new(Expr::Var("y".into())),
+                }),
+            }))),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -95,7 +123,7 @@ pub enum Expr {
     },
     Case {
         inner: Box<Expr>,
-        patterns: Vec<(Rc<Pattern>, Box<Expr>)>,
+        arms: Vec<(Rc<Pattern>, Box<Expr>)>,
     },
     Ite {
         cond: Box<Expr>,
