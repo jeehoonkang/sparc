@@ -10,9 +10,9 @@ use crate::syntax::{BinaryOp, Ctor, Expr, Pattern, UnaryOp, Value as SynValue, V
 
 #[derive(Debug, Clone)]
 pub struct Res<T> {
-    result: T,
-    work: u64,
-    span: u64,
+    pub result: T,
+    pub work: u64,
+    pub span: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -71,13 +71,6 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn coerce_integer(&self) -> Option<i64> {
-        match self {
-            Value::Integer(i) => Some(*i),
-            _ => None,
-        }
-    }
-
     pub fn coerce_bool(&self) -> Option<bool> {
         match self {
             Value::Boolean(b) => Some(*b),

@@ -84,22 +84,6 @@ pub enum Value {
     },
 }
 
-impl Value {
-    pub fn coerce_integer(&self) -> Option<i64> {
-        match self {
-            Value::Integer(i) => Some(*i),
-            _ => None,
-        }
-    }
-
-    pub fn coerce_bool(&self) -> Option<bool> {
-        match self {
-            Value::Boolean(b) => Some(*b),
-            _ => None,
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub enum Expr {
     Var(Var),
